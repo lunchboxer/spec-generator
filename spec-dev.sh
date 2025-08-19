@@ -278,6 +278,12 @@ find_latest_requirements() {
   return 0
 }
 
+# Generate design document (internal function for workflow)
+generate_design_internal() {
+  log_info "Running design generation..."
+  "$DESIGN_SCRIPT"
+}
+
 # Generate design document (command function)
 generate_design() {
   echo "=== Design Document Generation ==="

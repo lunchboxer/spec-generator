@@ -176,16 +176,28 @@ create_new_project() {
   # Check if directory already exists
   if [[ -d "$project_dir" ]]; then
     log_warning "Directory already exists: $project_dir"
+    echo
+    echo "This tool will add the following to the existing directory:"
+    echo "  - A 'specs' subdirectory (if it doesn't already exist)"
+    echo "  - A requirements form at: specs/requirements_form.md"
+    echo "    (This will overwrite any existing requirements form)"
+    echo
     log_prompt "Continue anyway? (y/N): "
     read -r continue_response
     if [[ ! "$continue_response" =~ ^[Yy]$ ]]; then
-      log_info "Project creation cancelled"
+      log_info "Project setup cancelled"
       exit 0
     fi
+    echo
   fi
 
   # Create project directory and specs subdirectory
-  log_info "Creating project directory: $project_dir"
+  if [[ -d "$project_dir" ]]; then
+    log_info "Setting up spec-driven development files in existing directory: $project_dir"
+  else
+    log_info "Creating project directory: $project_dir"
+  fi
+  
   mkdir -p "$project_dir/specs"
 
   # Copy template files to project directory
@@ -193,7 +205,11 @@ create_new_project() {
   cp "$TEMPLATE_FORM" "$project_dir/specs/"
   # Note: prompt template stays in script directory, requirements script will find it
 
-  log_success "Project directory created successfully!"
+  if [[ -d "$project_dir" ]]; then
+    log_success "Spec-driven development files added successfully!"
+  else
+    log_success "Project directory created successfully!"
+  fi
   echo
   echo "Project: $project_name"
   echo "Location: $project_dir"

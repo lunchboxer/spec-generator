@@ -64,11 +64,15 @@ show_usage() {
   echo "  4. Run '$0 design' to generate the design document"
   echo "  5. Run '$0 implementation' to generate the implementation plan"
   echo
+  echo "Interactive Mode:"
+  echo "  Run '$0' without arguments for intelligent step detection and interactive prompt"
+  echo
   echo "Examples:"
   echo "  $0 new                           # Start new project setup"
   echo "  cd my-project && $0 requirements # Generate requirements from project directory"
   echo "  cd my-project && $0 design       # Generate design from requirements"
   echo "  cd my-project && $0 implementation # Generate implementation plan from design"
+  echo "  $0                               # Run in interactive mode"
   echo "  $0 help                          # Show this help"
 }
 
@@ -274,7 +278,16 @@ generate_requirements() {
 
   # Run the requirements generation script from its location
   log_info "Running requirements generation..."
-  "$REQUIREMENTS_SCRIPT"
+  if "$REQUIREMENTS_SCRIPT"; then
+    # Find the generated file
+    local latest_requirements
+    latest_requirements=$(find_latest_requirements)
+    if [[ -n "$latest_requirements" ]]; then
+      log_success "Wrote requirements document to file: $latest_requirements"
+    fi
+  else
+    exit 1
+  fi
 }
 
 # Find the most recent requirements document
@@ -297,7 +310,16 @@ find_latest_requirements() {
 # Generate design document (internal function for workflow)
 generate_design_internal() {
   log_info "Running design generation..."
-  "$DESIGN_SCRIPT"
+  if "$DESIGN_SCRIPT"; then
+    # Find the generated file
+    local latest_design
+    latest_design=$(find_latest_design)
+    if [[ -n "$latest_design" ]]; then
+      log_success "Wrote design document to file: $latest_design"
+    fi
+  else
+    exit 1
+  fi
 }
 
 # Generate design document (command function)
@@ -351,7 +373,16 @@ find_latest_design() {
 # Generate implementation plan (internal function for workflow)
 generate_implementation_internal() {
   log_info "Running implementation plan generation..."
-  "$IMPLEMENTATION_SCRIPT"
+  if "$IMPLEMENTATION_SCRIPT"; then
+    # Find the generated file
+    local latest_implementation
+    latest_implementation=$(find "specs" -name "implementation_*.md" -type f -exec ls -t {} + 2>/dev/null | head -n1)
+    if [[ -n "$latest_implementation" ]]; then
+      log_success "Wrote implementation plan to file: $latest_implementation"
+    fi
+  else
+    exit 1
+  fi
 }
 
 # Generate implementation plan (command function)
@@ -385,26 +416,133 @@ generate_implementation() {
   generate_implementation_internal
 }
 
-# Open file in default editor
-open_in_editor() {
-  local file_path="$1"
-  local file_description="$2"
-
-  log_info "Opening $file_description..."
-
-  # Try to open with default editor
-  if command -v xdg-open &>/dev/null; then
-    xdg-open "$file_path" &
-    wait
-  elif command -v open &>/dev/null; then
-    open "$file_path" &
-    wait
-  elif [[ -n "$EDITOR" ]]; then
-    $EDITOR "$file_path"
-  else
-    log_warning "No default editor found. Please edit manually:"
-    echo "  $file_path"
+# Find the most recent requirements document
+find_latest_requirements() {
+  if [[ ! -d "specs" ]]; then
+    return 1
   fi
+
+  local requirements_file
+  requirements_file=$(find "specs" -name "requirements_*.md" -type f -exec ls -t {} + 2>/dev/null | head -n1)
+
+  if [[ -z "$requirements_file" || ! -s "$requirements_file" ]]; then
+    return 1
+  fi
+
+  echo "$requirements_file"
+  return 0
+}
+
+# Find the most recent design document
+find_latest_design() {
+  if [[ ! -d "specs" ]]; then
+    return 1
+  fi
+
+  local design_file
+  design_file=$(find "specs" -name "design_*.md" -type f -exec ls -t {} + 2>/dev/null | head -n1)
+
+  if [[ -z "$design_file" || ! -s "$design_file" ]]; then
+    return 1
+  fi
+
+  echo "$design_file"
+  return 0
+}
+
+# Detect the next logical step based on existing files
+detect_next_step() {
+  # Check if we're in a project directory
+  if [[ ! -f "specs/requirements_form.md" ]]; then
+    echo "new"
+    return
+  fi
+
+  # Check for requirements document
+  if ! find_latest_requirements >/dev/null; then
+    echo "requirements"
+    return
+  fi
+
+  # Check for design document
+  if ! find_latest_design >/dev/null; then
+    echo "design"
+    return
+  fi
+
+  # Check for implementation plan
+  local implementation_file
+  implementation_file=$(find "specs" -name "implementation_*.md" -type f -exec ls -t {} + 2>/dev/null | head -n1)
+  if [[ -z "$implementation_file" || ! -s "$implementation_file" ]]; then
+    echo "implementation"
+    return
+  fi
+
+  # If all documents exist, default to implementation
+  echo "implementation"
+}
+
+# Show interactive prompt
+show_interactive_prompt() {
+  local next_step
+  next_step=$(detect_next_step)
+  
+  local step_name
+  case "$next_step" in
+    "new") step_name="New Project" ;;
+    "requirements") step_name="Generate Requirements" ;;
+    "design") step_name="Generate Design" ;;
+    "implementation") step_name="Generate Implementation" ;;
+  esac
+  
+  echo "=== Spec-Driven Development Tool ==="
+  echo
+  log_info "Detected next logical step: $step_name"
+  echo
+  echo "Select an option:"
+  echo "  r - Generate requirements    (create requirements from form)"
+  echo "  d - Generate design          (create design from requirements)"
+  echo "  i - Generate implementation  (create implementation from design)"
+  echo "  n - New project              (create new project structure)"
+  echo "  h - Show help                (display help information)"
+  echo "  q - Quit                     (exit the tool)"
+  echo
+  log_prompt "Choose an option [${next_step:0:1}]: "
+  
+  read -r choice
+  
+  # Use detected step as default if no input
+  if [[ -z "$choice" ]]; then
+    choice="${next_step:0:1}"
+  fi
+  
+  case "$choice" in
+    "r"|"R") 
+      generate_requirements
+      ;;
+    "d"|"D") 
+      generate_design
+      ;;
+    "i"|"I") 
+      generate_implementation
+      ;;
+    "n"|"N") 
+      check_templates
+      create_new_project
+      ;;
+    "h"|"H") 
+      show_usage
+      ;;
+    "q"|"Q") 
+      log_info "Goodbye!"
+      exit 0
+      ;;
+    *)
+      log_error "Invalid option: $choice"
+      echo
+      show_interactive_prompt
+      ;;
+  esac
 }
 
 # Main function
@@ -429,10 +567,8 @@ main() {
     show_usage
     ;;
   "")
-    log_error "No command specified"
-    echo
-    show_usage
-    exit 1
+    # Run interactive mode when no command is provided
+    show_interactive_prompt
     ;;
   *)
     log_error "Unknown command: $command"
